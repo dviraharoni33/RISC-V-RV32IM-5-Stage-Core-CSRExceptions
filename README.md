@@ -85,5 +85,6 @@ The design is verified using a comprehensive SystemVerilog testbench:
 ## 6. Tools Used
 
 * **Language:** SystemVerilog (IEEE 1800)
-* **Design/Diagram:** [Insert Tool Name, e.g., Draw.io / LucidChart]
-* **Simulation:** [Insert Tool Name, e.g., Vivado / ModelSim / EDA Playground]
+* **Simulation:** Aldec Riviera-PRO (via EDA Playground)
+* **Waveform Viewing:** EPWave
+* **Diagram:** draw.io
