@@ -28,12 +28,10 @@ Written in **SystemVerilog**, the design tackles advanced computer architecture 
 ### Color Coding 
 
 * **Blue Modules (Storage & Memory):** Components that store state (`RegFile`, `I-MEM`, `D-MEM`, `PC Unit`).
-* **Green Modules (Processing):** Units performing calculations (`ALU`, `Iterative ALU`, `Branch Comp`, `Imm Gen`).
-* **Red/Pink Modules (Control):** The logic governing data flow and hazards (`Control Unit`, `Hazard Unit`, `CSR Unit`).
-* **Yellow Modules (Multiplexers):** Routing logic (`Forwarding Muxes`, `PC Mux`, `WB Mux`).
-* **Grey/Orange Blocks:** Pipeline Registers isolating the five stages (`IF/ID`, `ID/EX`, `EX/MEM`, `MEM/WB`).
-* **Red Lines:** Control Signals (e.g., `reg_write`, `stall`, `forward`).
-* **Black/Blue Lines:** 32-bit Datapath (Addresses, Data values).
+* **Green Modules (Processing):** Units performing calculations (`ALU`, `Iterative ALU`, `Branch Comp`, `Imm Gen`,`adders`).
+* **Red Modules (Control):** The logic governing data flow and hazards (`Control Unit`, `Hazard Unit`, `CSR Unit`,OR gate).
+* **Yellow Modules (Multiplexers):** Routing logic (`Forwarding Muxes`, `PC Mux`, `WB Mux`...).
+* **Orange Blocks:** Pipeline Registers isolating the five stages (`IF/ID`, `ID/EX`, `EX/MEM`, `MEM/WB`).
 
 The processor is organized hierarchically with `rv32_core` as the top-level entity. The data flows through the pipeline registers (`if_id`, `id_ex`, `ex_mem`, `mem_wb`), controlled by global stall/flush signals.
 
