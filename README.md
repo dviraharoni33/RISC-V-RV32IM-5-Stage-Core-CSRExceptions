@@ -1,90 +1,119 @@
-# RV32I Single-Cycle Processor
+# RV32IM 5-Stage Pipelined Processor
 
 ## 1. Introduction
 
 ### What is this project?
 
-This project implements a **Single-Cycle RISC-V Processor** based on the **RV32I** (Integer) Instruction Set Architecture. Designed and implemented in **SystemVerilog**, the processor is capable of executing one instruction per clock cycle.
-The core is designed for educational clarity and modularity, featuring a complete datapath that handles instruction fetching, decoding, register file operations, ALU computations, and memory access. This design serves as a fundamental building block for understanding computer architecture and hardware description languages (HDL).
+This project implements a fully functional **5-Stage Pipelined RISC-V Processor** based on the **RV32IM** Instruction Set Architecture. Unlike a basic Single-Cycle processor, this core splits instruction execution into five distinct stages (Fetch, Decode, Execute, Memory, Writeback) to optimize throughput and clock efficiency.
+
+Written in **SystemVerilog**, the design tackles advanced computer architecture challenges such as **Data Hazards**, **Control Hazards**, and **Multi-Cycle Operations**. It includes a dedicated `hazard_unit` for Forwarding and Stalling, an `iterative_alu` for multiplication/division, and a `csr_unit` for handling interrupts and exceptions.
 
 ### Key Features
 
-* **RV32I Support:** Implements essential integer instructions including R-type, I-type, S-type, B-type, and J-type.
-* **Single-Cycle Execution:** Every instruction, from fetch to writeback, is completed within a single clock period.
-* **Modular Architecture:** Clear logical separation between the Datapath (execution units) and the Control Logic (decoding and routing).
-* **External Memory Interface:** Synchronous interface for Instruction Memory (IMEM) and Data Memory (DMEM).
-* **JAL & Branch Support:** Includes dedicated hardware for calculating jump and branch targets, including a `PC+4` link register path for JAL.
-* **Modern SystemVerilog:** Written with clean, synthesizable SystemVerilog code for robust simulation and implementation.
+* **5-Stage Pipeline:** Implements IF, ID, EX, MEM, WB stages with pipeline registers.
+* **RV32IM ISA:** Supports standard Integer instructions plus **Multiplication and Division** (M-Extension).
+* **Advanced Hazard Handling:**
+* **Full Forwarding:** Solves Read-After-Write (RAW) hazards by bypassing data from MEM and WB stages back to EX.
+* **Load-Use Detection:** Automatically inserts "bubbles" (Stalls) when a Load instruction is immediately followed by a dependent instruction.
+* **Branch Prediction:** Uses a "Predict Not Taken" strategy with automatic flushing upon misprediction.
+
+
+* **Iterative ALU:** A state-machine-based unit that handles MUL/DIV operations over multiple cycles, stalling the pipeline only when necessary.
+* **Privileged Architecture (CSRs):** Supports `ecall`, `mret`, and external Interrupts (IRQ) with precise trap handling via `mtvec`, `mepc`, and `mcause`.
 
 ## 2. Architecture & Block Diagram
 
-The system is organized into a modular hierarchy. The `rv32_core` acts as the top-level entity, coordinating the flow of data between the following functional units:
+<img width="1371" height="491" alt="דיאגרמת מלבנים" src="https://github.com/user-attachments/assets/2dfc1b4c-9a59-4087-938a-153440537e2f" />
 
-<img width="601" height="575" alt="דיאגרמת מלבנים" src="https://github.com/user-attachments/assets/a97c0cda-1fad-4a94-a3ed-7af63bd50032" />
+### Color Coding 
 
+* **Blue Modules (Storage & Memory):** Components that store state (`RegFile`, `I-MEM`, `D-MEM`, `PC Unit`).
+* **Green Modules (Processing):** Units performing calculations (`ALU`, `Iterative ALU`, `Branch Comp`, `Imm Gen`).
+* **Red/Pink Modules (Control):** The logic governing data flow and hazards (`Control Unit`, `Hazard Unit`, `CSR Unit`).
+* **Yellow Modules (Multiplexers):** Routing logic (`Forwarding Muxes`, `PC Mux`, `WB Mux`).
+* **Grey/Orange Blocks:** Pipeline Registers isolating the five stages (`IF/ID`, `ID/EX`, `EX/MEM`, `MEM/WB`).
+* **Red Lines:** Control Signals (e.g., `reg_write`, `stall`, `forward`).
+* **Black/Blue Lines:** 32-bit Datapath (Addresses, Data values).
 
-### Color Coding (As shown in Diagram)
-
-* **Green Modules:** Control and Sequencing logic (Control_Logic, pc_unit, Imm_Gen).
-* **Blue Modules:** Computation units (ALU, Branch_Addr).
-* **Yellow Modules:** Storage and Memory interfaces (Regfile, Instruction/Data Memory).
-* **Red Lines:** Control Signals (Write Enables, Mux Selectors).
-* **Black Lines:** 32-bit Datapath (Addresses, Instructions, Data).
+The processor is organized hierarchically with `rv32_core` as the top-level entity. The data flows through the pipeline registers (`if_id`, `id_ex`, `ex_mem`, `mem_wb`), controlled by global stall/flush signals.
 
 ### Module Descriptions
 
-**pc_unit (Program Counter)**
-Manages the current instruction address. It handles sequential execution (`PC+4`) and jumps/branches based on the `branch_taken` signal.
+* **`pc_unit` (Fetch):** Manages the Program Counter. It handles sequential execution (+4), Branch/Jump targets (`pc_target_ex`), and Trap vectors (`trap_vector`).
+* **`hazard_unit` (The "Traffic Cop"):** The most complex control block. It monitors dependencies between stages to generate:
+* `forward_a` / `forward_b`: Select signals for ALU operands.
+* `stall_global`: Freezes the PC and IF/ID stage (Load-Use or MUL/DIV busy).
+* `flush_ex` / `flush_branch`: Clears pipeline registers on jumps or traps.
 
-**Control_Logic**
-The "brain" of the processor. It decodes the opcode from the `imem_data` and generates all necessary control signals (e.g., `alu_src_imm`, `mem_to_reg`, `reg_write_en`).
 
-**regfile (Register File)**
-Contains 32 general-purpose registers. It supports dual asynchronous reads (`rs1`, `rs2`) and a synchronous write (`rd`) on the rising clock edge.
-
-**alu (Arithmetic Logic Unit)**
-Performs the core computations (ADD, SUB, AND, OR, SLT). It also generates a `zero_flag` used for branch decisions.
-
-**Imm_Gen (Immediate Generator)**
-Extracts and sign-extends immediate values from various instruction formats (I, S, B, J) to 32-bit values.
+* **`iterative_alu` (Execute):** Handles `MUL`, `DIV`, `REM` operations. It uses a `busy/ready` handshake interface to pause the pipeline during calculation.
+* **`csr_unit` (Execute):** Manages Control and Status Registers. It detects Interrupts (`irq_i`) and Exceptions, updates the `mcause` register, and redirects the PC to the trap handler.
+* **`regfile` (Decode):** 32x32-bit register file with internal error checking (assertions) for reading `x0`.
+* **`control_unit` (Decode):** Decodes the opcode and generates control signals for the pipeline (ALU Op, MemWrite, RegWrite, etc.).
 
 ## 3. Design Details
 
-### Datapath & JAL Logic
+### Datapath & Hazard Resolution
 
-To support the `JAL` (Jump and Link) instruction, the design includes a specialized path. While the `Branch_Addr` calculates the target destination, a dedicated `+4` adder circuit feeds the `JAL Mux`. This ensures that the address of the *next* instruction is saved back to the register file, allowing for subroutine returns.
+To maintain data integrity in a pipelined environment, the design employs three main strategies:
 
-### Writeback Selection
+1. **Forwarding (Bypassing):**
+When an instruction in the **EX** stage needs a result that is currently in the **MEM** or **WB** stage, the `hazard_unit` activates the forwarding multiplexers.
+* *Logic:* If `rs1` matches `rd_mem` or `rd_wb`, the data is routed directly to the ALU, skipping the register file read.
 
-The processor utilizes a two-stage multiplexing system for the writeback data:
 
-1. **Writeback Mux:** Chooses between the ALU result (calculation) and Data Memory output (Load instructions).
-2. **JAL Mux:** Final selection between the standard writeback data and the `PC+4` return address.
+2. **Stalling (Load-Use):**
+If a `LOAD` instruction is detected in the **EX** stage and the next instruction in **ID** needs that data, forwarding is impossible (data is still in memory).
+* *Action:* The `hazard_unit` asserts `stall_global`. The PC holds its value, and the ID stage is frozen for one cycle.
+
+
+3. **Flushing (Control Hazards):**
+When a Branch is taken (`branch_condition_met`) or a Jump occurs, the instructions currently in IF and ID are invalid.
+* *Action:* The `flush_branch` signal clears the pipeline registers, effectively converting the fetched instructions into NOPs.
+
+
+
+### Interrupt Handling Flow
+
+1. **Trigger:** An external IRQ (`irq_i`) or internal Exception (`ecall`) is detected.
+2. **Trap:** The `csr_unit` asserts `trap_taken`.
+3. **Context Save:** The current PC is saved to `mepc`.
+4. **Jump:** The PC is forced to the value in `mtvec` (Trap Vector).
+5. **Return:** Execution of `mret` restores the PC from `mepc`.
 
 ## 4. Verification
 
-The design is verified using a comprehensive SystemVerilog testbench:
+The design is verified using a system-level Testbench (`tb_rv32_core`) that simulates real memory and instruction execution.
 
-<img width="1833" height="235" alt="דיאגרמת גלים" src="https://github.com/user-attachments/assets/7a485634-111a-409d-89a6-8b7fdd11c73c" />
+### Verification Scenarios (Waveform Analysis)
 
-* **Instruction Loading:** Hexadecimal machine code is loaded into the Instruction Memory.
-* **Execution Tracking:** The testbench monitors the `PC`, `ALU_Result`, and `Regfile` updates to ensure protocol compliance.
-* **Data Integrity:** Validates that `Store` (SW) and `Load` (LW) operations correctly interact with the Data Memory.
-* **Branch/Jump Validation:** Ensures the `pc_current` correctly updates to non-sequential addresses when jump conditions are met.
+<img width="1827" height="312" alt="דיאגרמת גלים" src="https://github.com/user-attachments/assets/64be846b-9779-4e2d-be12-04bfffc28b26" />
+
+* **Forwarding Check:** Verified by executing `ADD` immediately after `ADDI` to the same register. Waveforms confirm `forward_a/b` signals toggling.
+* **Load-Use Hazard:** Verified by `LW` followed by usage. The `stall_global` signal freezes the PC for one cycle.
+* **Branching:** Verified via a loop structure (`BNE`), observing the `pc_src_ex` signal and PC discontinuity.
+* **Interrupts:** Verified by toggling the `irq` line during execution. The PC jumps to the handler address (`0x80`), executes the handler, and returns via `mret`.
+
+### Automatic Checking
+
+The testbench includes a `check_reg` task that compares the Register File contents against expected values after execution, printing `[PASS]` or `[FAIL]` messages to the console.
 
 ## 5. File Descriptions
 
-* **rv32_core.sv:** The top-level wrapper integrating all modules.
-* **control_logic.sv:** Opcode decoder and control signal generator.
-* **regfile.sv:** 32x32-bit register file implementation.
-* **alu.sv:** Combinational logic for arithmetic and logical operations.
-* **pc_unit.sv:** Synchronous logic for the Program Counter and reset handling.
-* **imm_gen.sv:** Immediate value extraction logic.
-* **branch_addr.sv:** Dedicated adder for calculating jump/branch targets.
+* `rv32_core.sv`: Top-level wrapper integrating all stages.
+* `hazard_unit.sv`: Forwarding, Stalling, and Flushing logic.
+* `iterative_alu.sv`: Multi-cycle arithmetic unit.
+* `csr_unit.sv`: Trap and CSR register logic.
+* `control_unit.sv`: Main decoder.
+* `regfile.sv`: Register file implementation.
+* `alu.sv`: Combinational arithmetic logic.
+* `pc_unit.sv`: Program Counter logic.
+* `rv32_pkg.sv`: SystemVerilog package with Enums and Typedefs.
+* `rv32_assertions.sv`: Runtime assertion checker for debug.
 
 ## 6. Tools Used
 
 * **Language:** SystemVerilog (IEEE 1800)
-* **Simulation:** Aldec Riviera-PRO (via EDA Playground)
+* **Simulation:** Aldec Riviera-PRO, via EDA Playground
 * **Waveform Viewing:** EPWave
-* **Diagram:** draw.io
+* **Diagrams:** draw.io 
