@@ -13,9 +13,9 @@ Written in **SystemVerilog**, the design tackles advanced computer architecture 
 * **5-Stage Pipeline:** Implements IF, ID, EX, MEM, WB stages with pipeline registers.
 * **RV32IM ISA:** Supports standard Integer instructions plus **Multiplication and Division** (M-Extension).
 * **Advanced Hazard Handling:**
-* **Full Forwarding:** Solves Read-After-Write (RAW) hazards by bypassing data from MEM and WB stages back to EX.
-* **Load-Use Detection:** Automatically inserts "bubbles" (Stalls) when a Load instruction is immediately followed by a dependent instruction.
-* **Branch Prediction:** Uses a "Predict Not Taken" strategy with automatic flushing upon misprediction.
+    * **Full Forwarding:** Solves Read-After-Write (RAW) hazards by bypassing data from MEM and WB stages back to EX.
+    * **Load-Use Detection:** Automatically inserts "bubbles" (Stalls) when a Load instruction is immediately followed by a dependent instruction.
+    * **Branch Prediction:** Uses a "Predict Not Taken" strategy with automatic flushing upon misprediction.
 
 
 * **Iterative ALU:** A state-machine-based unit that handles MUL/DIV operations over multiple cycles, stalling the pipeline only when necessary.
@@ -41,9 +41,9 @@ The processor is organized hierarchically with `rv32_core` as the top-level enti
 
 * **`pc_unit` (Fetch):** Manages the Program Counter. It handles sequential execution (+4), Branch/Jump targets (`pc_target_ex`), and Trap vectors (`trap_vector`).
 * **`hazard_unit` (The "Traffic Cop"):** The most complex control block. It monitors dependencies between stages to generate:
-* `forward_a` / `forward_b`: Select signals for ALU operands.
-* `stall_global`: Freezes the PC and IF/ID stage (Load-Use or MUL/DIV busy).
-* `flush_ex` / `flush_branch`: Clears pipeline registers on jumps or traps.
+    * `forward_a` / `forward_b`: Select signals for ALU operands.
+    * `stall_global`: Freezes the PC and IF/ID stage (Load-Use or MUL/DIV busy).
+    * `flush_ex` / `flush_branch`: Clears pipeline registers on jumps or traps.
 
 
 * **`iterative_alu` (Execute):** Handles `MUL`, `DIV`, `REM` operations. It uses a `busy/ready` handshake interface to pause the pipeline during calculation.
@@ -105,6 +105,7 @@ The testbench includes a `check_reg` task that compares the Register File conten
 * `iterative_alu.sv`: Multi-cycle arithmetic unit.
 * `csr_unit.sv`: Trap and CSR register logic.
 * `control_unit.sv`: Main decoder.
+* `imm_gen.sv`: Immediate value extractor and sign extender.
 * `regfile.sv`: Register file implementation.
 * `alu.sv`: Combinational arithmetic logic.
 * `pc_unit.sv`: Program Counter logic.
